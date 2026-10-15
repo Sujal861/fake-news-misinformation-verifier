@@ -1299,3 +1299,16 @@ textarea:focus { background: #10131a; }
   font-size: 13.5px !important;
 }
 .plain-language strong { color: var(--accent); }
+
+
+.verdict-help {
+  margin: 12px 0 0;
+  max-width: 64ch;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(212, 255, 63, .035);
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
