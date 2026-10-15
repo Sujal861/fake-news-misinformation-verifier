@@ -349,6 +349,11 @@ function verdictCard(report) {
       el('p', { class: 'verdict-label' }, `${verdict.title ?? verdict.label} · confidence ${Math.round(verdict.confidence * 100)}%`),
       el('h2', { class: 'verdict-headline' }, verdict.headline),
       el('p', { class: 'verdict-basis' }, verdict.basis),
+      el('p', { class: 'verdict-help' },
+        verdict.label === 'unverified'
+          ? 'In simple words: we could not confirm this claim from the available evidence. That does not mean it is true or false.'
+          : 'In simple words: this result is based on the evidence and checks listed below. Open the sources before making a decision.'
+      ),
     ),
     ring,
   );
