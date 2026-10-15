@@ -1,0 +1,23 @@
+{
+  // Local development + preview config for the Cloudflare Worker.
+  // `wrangler dev` serves public/ as static assets and routes /api/* to the Worker.
+  "name": "forward-check",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-05-23",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // Leave empty locally to exercise the offline heuristic-only path.
+    "FACTCHECK_API_KEY": "",
+    "EXA_API_KEY": "",
+    "LLM_API_KEY": "",
+    "LLM_BASE_URL": "https://api.openai.com/v1",
+    "LLM_MODEL": "gpt-4o-mini"
+  }
+}

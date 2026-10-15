@@ -1,0 +1,22 @@
+{
+  "name": "forward-check",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Automated fake news and forwarded misinformation verifier. Runs offline heuristics by default and upgrades to live fact-check, web-evidence and LLM reasoning when API keys are configured.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "node scripts/build.mjs",
+    "test": "node --test",
+    "check": "node scripts/build.mjs && node --test",
+    "verify": "node cli.js",
+    "deploy:preview": "node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "wrangler": "^4.0.0"
+  }
+}

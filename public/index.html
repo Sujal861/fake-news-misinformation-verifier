@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ForwardCheck — verify forwarded messages before you share them</title>
+    <meta
+      name="description"
+      content="Paste a forwarded message and get a red-flag analysis, published fact-check matches and cited evidence. Works offline; gets stronger with API keys."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <meta name="theme-color" content="#0b0c0e" />
+    <link rel="preload" href="/fonts/space-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b0c0e'/><rect x='9.5' y='9.5' width='13' height='13' rx='2' fill='none' stroke='%23d4ff3f' stroke-width='2.5'/></svg>"
+    />
+  </head>
+  <body>
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span>Check before you share</span><span>Forwarded ≠ verified</span><span>One in four forwards is false</span>
+        <span>Sources beat screenshots</span><span>No source, no share</span><span>Slow down before you forward</span>
+        <span>Check before you share</span><span>Forwarded ≠ verified</span><span>One in four forwards is false</span>
+        <span>Sources beat screenshots</span><span>No source, no share</span><span>Slow down before you forward</span>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <h1>ForwardCheck</h1>
+        </div>
+      </div>
+      <div class="status" id="mode-status" aria-live="polite">
+        <span class="dot" id="mode-dot"></span>
+        <span id="mode-label">Checking capabilities…</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="hero-kicker">// Misinformation forensics · offline first</p>
+        <h2 class="hero-title">Don't just forward it. <span class="hl">Verify it.</span></h2>
+        <p class="hero-sub">
+          Paste the message that landed in your inbox. ForwardCheck returns the red flags, the
+          published fact-checks and the evidence it could find — plus a suggested reply you can
+          send back instead of arguing.
+        </p>
+        <div class="hero-meta">
+          <span>Heuristic engine on-device</span>
+          <span>No account, no key required</span>
+          <span>English · हिन्दी · Hinglish</span>
+        </div>
+      </section>
+
+      <section class="panel input-panel">
+        <label class="field-label" for="message">
+          The forwarded message
+          <span class="hint">Text, Hinglish, Hindi or any other language. Links and payment details are fine to include.</span>
+        </label>
+        <textarea
+          id="message"
+          rows="9"
+          placeholder="Paste the whole forward here — including “Forwarded many times”, emoji and any link…"
+          spellcheck="false"
+        ></textarea>
+
+        <div class="controls">
+          <button id="verify" class="btn primary" type="button">
+            <span class="btn-label">Verify message</span>
+          </button>
+          <button id="clear" class="btn ghost" type="button">Clear</button>
+          <span class="counter" id="counter">0 characters</span>
+        </div>
+
+        <div class="samples">
+          <span class="samples-label">Try an example:</span>
+          <div id="samples" class="chips"></div>
+        </div>
+
+        <details class="model-panel" id="model-panel">
+          <summary>Use an AI model (optional — any provider)</summary>
+          <div class="model-grid">
+            <div class="model-row">
+              <div class="model-field">
+                <label for="llm-provider">Provider</label>
+                <select id="llm-provider">
+                  <option value="">None — offline check only</option>
+                </select>
+              </div>
+              <div class="model-field">
+                <label for="llm-model">Model <a id="llm-keylink" href="#" target="_blank" rel="noopener noreferrer" hidden>Get a key →</a></label>
+                <input id="llm-model" type="text" placeholder="model name" autocomplete="off" spellcheck="false" />
+              </div>
+            </div>
+            <div class="model-row">
+              <div class="model-field">
+                <label for="llm-key">API key</label>
+                <input id="llm-key" type="password" placeholder="paste your key — stays in this browser" autocomplete="off" />
+              </div>
+              <div class="model-field" id="llm-baseurl-field" hidden>
+                <label for="llm-baseurl">Base URL (OpenAI-compatible)</label>
+                <input id="llm-baseurl" type="text" placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" />
+              </div>
+              <div class="model-check">
+                <input id="llm-remember" type="checkbox" />
+                <label for="llm-remember">Remember on this device</label>
+              </div>
+            </div>
+            <p class="model-note" id="llm-note">
+              Your key is kept in this browser and sent only with your own checks — it is never stored on the
+              server. Pick any provider above, or leave it off for the instant offline check.
+            </p>
+          </div>
+        </details>
+      </section>
+
+      <section id="output" class="output" aria-live="polite"></section>
+
+      <section class="panel explainer">
+        <h2>How to read this</h2>
+        <div class="explain-grid">
+          <div>
+            <h3>Risk is not proof</h3>
+            <p>
+              The red-flag score describes the <em>message</em> — its urgency, its missing source, its
+              scare tactics. Manipulative wording is a strong hint, but only a fact-check or a cited
+              source can settle whether the claim is true. That is why a message with red flags but no
+              evidence is reported as <strong>unverified</strong>, never as false.
+            </p>
+          </div>
+          <div>
+            <h3>Offline first, better with keys</h3>
+            <p>
+              The heuristic engine, claim extraction and scam detection run with no network and no
+              accounts. Add a fact-check API key, a web-search key or an LLM key and the same report
+              gains published reviews, live sources and multilingual reasoning — each provider that is
+              missing only downgrades its own contribution.
+            </p>
+          </div>
+          <div>
+            <h3>What to do with the answer</h3>
+            <p>
+              Use the suggested reply to answer the person who forwarded it with a source instead of an
+              argument. Never send money, an OTP or a PIN to anyone who reached you through a forward.
+            </p>
+          </div>
+        </div>
+        <p class="disclaimer">
+          ForwardCheck is an aid, not an authority. It can miss context and it can be wrong — check the
+          linked sources yourself before acting on a claim.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <span>Runs on Cloudflare Workers · heuristic engine always on-device</span>
+      <a href="/api/health">Provider status</a>
+    </footer>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

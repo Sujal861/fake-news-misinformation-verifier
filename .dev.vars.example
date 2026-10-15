@@ -1,0 +1,16 @@
+# Copy to `.dev.vars` for local `wrangler dev`. Every key is optional:
+# with none of them set the app runs fully offline on heuristics alone.
+
+# Google Fact Check Tools API (free, needs a Google Cloud API key).
+# https://console.cloud.google.com/apis/library/factchecktools.googleapis.com
+FACTCHECK_API_KEY=
+
+# Live web evidence search (Exa). Free tier available.
+# https://dashboard.exa.ai
+EXA_API_KEY=
+
+# Any OpenAI-compatible chat completions endpoint (OpenAI, OpenLLM gateway,
+# Groq, Gemini's OpenAI-compat endpoint, a local proxy, ...).
+LLM_API_KEY=
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
