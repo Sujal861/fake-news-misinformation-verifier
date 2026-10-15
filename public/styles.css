@@ -1271,3 +1271,31 @@ textarea:focus { background: #10131a; }
   .claim:hover, .actions li:hover { transform: none; }
   .hero-title .hl { animation: none; }
 }
+
+
+/* Plain-language helper text added in the UX refresh */
+.field-help, .section-intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.field-help {
+  padding: 12px 15px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 9px;
+  background: rgba(212, 255, 63, .035);
+}
+.field-help strong { color: var(--ink); }
+.section-intro { margin: -10px 0 22px; max-width: 70ch; }
+.plain-language {
+  margin: 12px 0 0 !important;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(212, 255, 63, .035);
+  color: var(--muted);
+  font-size: 13.5px !important;
+}
+.plain-language strong { color: var(--accent); }
