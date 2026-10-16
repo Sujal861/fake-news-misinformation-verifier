@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Use ForwardCheck from WhatsApp &amp; Telegram</title>
+    <meta
+      name="description"
+      content="Check a forwarded message without leaving the chat app: share it to ForwardCheck from the share sheet, open a prefilled link, or forward it to a bot."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <meta name="theme-color" content="#0b0c0e" />
+    <link rel="preload" href="/fonts/space-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b0c0e'/><rect x='9.5' y='9.5' width='13' height='13' rx='2' fill='none' stroke='%23d4ff3f' stroke-width='2.5'/></svg>"
+    />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <h1><a href="/" style="color: inherit; text-decoration: none">ForwardCheck</a></h1>
+        </div>
+      </div>
+      <div class="status">
+        <a href="/">← Back to the checker</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="hero-kicker">// Beyond the browser tab</p>
+        <h2 class="hero-title">Check it <span class="hl">where it arrives.</span></h2>
+        <p class="hero-sub">
+          A forward lands on WhatsApp. Opening a website to check it is a step most people skip.
+          So ForwardCheck travels to the chat app instead: share the message to it, open a prefilled
+          link, or forward it to a bot and get the verdict back in the same thread.
+        </p>
+        <div class="status-row" id="channel-status" aria-live="polite">
+          <span class="status-chip">Checking which channels are live…</span>
+        </div>
+      </section>
+
+      <section class="panel explainer">
+        <h2>Share a message to ForwardCheck</h2>
+
+        <div class="doc-section">
+          <h3>Android — from the share sheet (no typing)</h3>
+          <p>
+            This is the closest thing to being inside WhatsApp, and it needs no server, no account
+            and no bot:
+          </p>
+          <ol>
+            <li>Open this site in Chrome and choose <strong>Install app</strong> (or <em>Add to Home screen</em>).</li>
+            <li>In WhatsApp, long-press the forwarded message and tap <strong>Share</strong>.</li>
+            <li>
+              Pick <strong>ForwardCheck</strong> from the share sheet. It opens with the message
+              already filled in and the check already running.
+            </li>
+          </ol>
+          <p>
+            The message is handed to the page, not to a server. If this deployment has no API keys
+            configured, nothing about it leaves the phone.
+          </p>
+        </div>
+
+        <div class="doc-section">
+          <h3>iPhone &amp; iPad</h3>
+          <p>
+            Safari does not yet let a website register itself in the share sheet, so use a Shortcut
+            once and it appears there forever:
+          </p>
+          <ol>
+            <li>Open <strong>Shortcuts → New Shortcut</strong>.</li>
+            <li>Enable <strong>Show in Share Sheet</strong> and set it to accept <em>Text</em>.</li>
+            <li>
+              Add <strong>URL → Open URLs</strong> and build it as
+              <code class="code-block">https://YOUR-SITE/?text=[Shortcut Input]</code>
+            </li>
+            <li>Name it ForwardCheck. It now shows up when you tap Share on a message.</li>
+          </ol>
+        </div>
+
+        <div class="doc-section">
+          <h3>A link that arrives preloaded</h3>
+          <p>
+            Any link of this shape opens the checker with the message already in the box — useful
+            for a poster, a QR code at a desk, or a link someone can forward:
+          </p>
+          <code class="code-block">https://YOUR-SITE/?text=PASTE-THE-URL-ENCODED-MESSAGE-HERE</code>
+          <p>
+            The message is stripped from the address bar as soon as the page opens, so a shared
+            link does not leave someone's forward sitting in their browser history.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel explainer">
+        <h2>Forward it to a bot</h2>
+        <p class="hero-sub" style="margin-top: 12px">
+          A bot needs the hosted deployment — it answers with the same engine, so it works with no
+          provider keys at all and gets fact-check matches when the server has them. Bots handle
+          <strong>text</strong>; images, voice notes and video are not analysed.
+        </p>
+
+        <div class="doc-section">
+          <h3>Telegram — the quick one</h3>
+          <p>Anyone with the bot's @username can use it. Setting it up is a token and one command:</p>
+          <ol>
+            <li>Message <strong>@BotFather</strong>, send <code>/newbot</code>, keep the token.</li>
+            <li>
+              Set the Worker secrets:
+              <code class="code-block">npx wrangler secret put TELEGRAM_BOT_TOKEN
+npx wrangler secret put TELEGRAM_WEBHOOK_SECRET</code>
+            </li>
+            <li>
+              Point Telegram at the deployment (one command; it needs the two secrets above):
+              <code class="code-block">npm run set-webhook -- https://YOUR-SITE</code>
+            </li>
+          </ol>
+          <p>
+            Then forward any message to the bot and the verdict comes back in the chat. Send
+            <code>/start</code> for the instructions.
+          </p>
+        </div>
+
+        <div class="doc-section">
+          <h3>WhatsApp — where the forwards actually are</h3>
+          <p>
+            This needs a Meta app and a WhatsApp Business number. Create the app, add the WhatsApp
+            product, and take note of four values: the access token, the phone number ID, the app
+            secret, and a verify token you invent.
+          </p>
+          <ol>
+            <li>
+              Set the secrets:
+              <code class="code-block">npx wrangler secret put WHATSAPP_TOKEN
+npx wrangler secret put WHATSAPP_PHONE_NUMBER_ID
+npx wrangler secret put WHATSAPP_APP_SECRET
+npx wrangler secret put WHATSAPP_VERIFY_TOKEN</code>
+            </li>
+            <li>
+              In the app's WhatsApp → Configuration page, set the callback URL to
+              <code class="code-block">https://YOUR-SITE/whatsapp</code>
+              and enter the same verify token there.
+            </li>
+            <li>Subscribe to the <strong>messages</strong> webhook field.</li>
+            <li>Forward a message to the business number and the verdict comes back.</li>
+          </ol>
+          <p>
+            Meta only allows free-form replies inside the 24-hour window a user's message opens, so
+            the bot answers immediately rather than sending follow-ups. Every incoming call is
+            checked against the <code>X-Hub-Signature-256</code> HMAC before it is parsed.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel explainer">
+        <h2>Honest limits</h2>
+        <div class="explain-grid">
+          <div>
+            <h3>Same engine, fewer pixels</h3>
+            <p>
+              The bots run the identical heuristics, claim ranking and verdict fusion as the web
+              app, so they cannot disagree with it. They just cannot show you the dial, the
+              highlighted evidence or the score ring.
+            </p>
+          </div>
+          <div>
+            <h3>Text in, text out</h3>
+            <p>
+              Forwarded images, voice notes and PDFs are the hardest cases in misinformation, and
+              none of the channels inspect them yet. Paste or forward the accompanying text.
+            </p>
+          </div>
+          <div>
+            <h3>Nothing is stored</h3>
+            <p>
+              A check is made and answered. There is no message history, no database and no
+              per-user record — which also means no way to look back at what you checked earlier.
+            </p>
+          </div>
+        </div>
+        <p class="disclaimer">
+          Both bots are only as live as this deployment's secrets. If the status chips above say a
+          channel is not configured, its webhook will refuse every request rather than answer.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <span>ForwardCheck · same engine in the browser, the Worker and the chats</span>
+      <a href="/">Check a message</a>
+    </footer>
+
+    <script>
+      // Show which channels this deployment can actually serve, straight from the
+      // API. On a static host there is no /api/health and we say so.
+      (async () => {
+        const host = document.getElementById('channel-status');
+        const chip = (label, ok) => {
+          const span = document.createElement('span');
+          span.className = 'status-chip';
+          span.textContent = `${label}: ${ok ? 'live' : 'not configured'}`;
+          return span;
+        };
+
+        try {
+          const response = await fetch('/api/health');
+          const health = await response.json();
+          if (!response.ok || !Array.isArray(health.channels)) throw new Error('no channels');
+
+          host.replaceChildren(
+            ...health.channels.map((channel) => chip(channel.label, channel.configured)),
+            chip('Share sheet', true),
+            chip('Deep links', true),
+          );
+        } catch {
+          host.replaceChildren(
+            chip('Bots', false),
+            chip('Share sheet', true),
+            chip('Deep links', true),
+          );
+          const note = document.createElement('span');
+          note.className = 'status-chip';
+          note.textContent = 'Static deployment — no bot endpoints on this host';
+          host.append(note);
+        }
+      })();
+    </script>
+  </body>
+</html>

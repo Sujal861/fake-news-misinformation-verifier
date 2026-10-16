@@ -28,7 +28,7 @@ const els = {
   llmNote: $('#llm-note'),
 };
 
-const state = { busy: false, lastReport: null, llmPresets: [] };
+const state = { busy: false, lastReport: null, llmPresets: [], serverAvailable: null };
 
 const LLM_STORE_KEY = 'forwardcheck.llm';
 
@@ -49,7 +49,48 @@ async function boot() {
 
   setupModelPanel();
   updateCounter();
+  registerServiceWorker();
+  applySharedInput();
   await Promise.all([loadHealth(), loadSamples()]);
+}
+
+/**
+ * Cache the app shell so an installed ForwardCheck opens and runs with no
+ * network. Silent on failure: without a service worker the page still works, it
+ * just needs the network for its own files.
+ */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  if (window.location.protocol !== 'https:' && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}
+
+/**
+ * A message can arrive from outside the page: the PWA share target (sharing a
+ * forward straight out of WhatsApp or Messages), a `?text=` deep link, or a QR
+ * code. Prefill and run it immediately, then strip it from the address bar — the
+ * shared message is often personal and does not belong in the URL or in the
+ * back/forward history.
+ */
+function applySharedInput() {
+  const params = new URLSearchParams(window.location.search);
+  const shared = [params.get('text'), params.get('url')]
+    .filter((value) => typeof value === 'string' && value.trim() !== '')
+    .join('\n')
+    .trim();
+
+  if (shared === '') return;
+
+  els.message.value = shared;
+  updateCounter();
+  try {
+    history.replaceState(null, '', window.location.pathname);
+  } catch {
+    /* older embedded webviews refuse replaceState; harmless */
+  }
+  submit();
 }
 
 // ------------------------------------------------------------------- BYO LLM
@@ -162,6 +203,8 @@ async function loadHealth() {
   try {
     const response = await fetch('/api/health');
     const health = await response.json();
+    if (!response.ok || !Array.isArray(health?.providers)) throw new Error(`status ${response.status}`);
+    state.serverAvailable = true;
     state.serverProviders = health.providers.filter((provider) => provider.configured);
 
     state.llmPresets = Array.isArray(health.llmPresets) ? health.llmPresets : [];
@@ -172,8 +215,9 @@ async function loadHealth() {
     applySavedLlm();
     updateModeLabel();
   } catch {
-    els.modeDot.className = 'dot error';
-    els.modeLabel.textContent = 'Server unreachable';
+    // No API here — a static host is a supported way to run this, not a fault.
+    state.serverAvailable = false;
+    updateModeLabel();
   }
 }
 
@@ -181,6 +225,13 @@ function updateModeLabel() {
   const llm = currentLlmConfig();
   if (llm) {
     const preset = state.llmPresets.find((item) => item.id === llm.provider);
+    if (state.serverAvailable === false) {
+      els.modeDot.className = 'dot offline';
+      els.modeLabel.textContent = 'Offline — your key is not being used';
+      els.modeLabel.title = 'No API route answered, so checks run in this browser with the offline engine. A configured model key needs the server and is skipped.';
+      els.llmNote.className = 'model-note';
+      return;
+    }
     els.modeDot.className = 'dot live';
     els.modeLabel.textContent = `Your model: ${preset?.label ?? llm.provider} · ${llm.model || 'default'}`;
     els.modeLabel.title = 'Reasoning runs with your own API key. It is sent only with your checks and never stored on the server.';
@@ -194,6 +245,10 @@ function updateModeLabel() {
     els.modeDot.className = 'dot live';
     els.modeLabel.textContent = `Enhanced: ${configured.map((provider) => provider.label).join(', ')}`;
     els.modeLabel.title = 'These providers are configured on the server.';
+  } else if (state.serverAvailable === false) {
+    els.modeDot.className = 'dot offline';
+    els.modeLabel.textContent = 'Offline — engine runs in this browser';
+    els.modeLabel.title = 'No API route answered. The red-flag scan, claim ranking and scam detection run from the engine bundled into this page, so nothing is sent anywhere.';
   } else {
     els.modeDot.className = 'dot offline';
     els.modeLabel.textContent = 'Offline mode — heuristic engine only';
@@ -206,17 +261,25 @@ async function loadSamples() {
     const response = await fetch('/api/samples');
     const { samples } = await response.json();
     for (const sample of samples) {
-      const chip = el('button', { class: 'chip', type: 'button', title: sample.text.slice(0, 160) }, sample.label);
-      chip.addEventListener('click', () => {
-        els.message.value = sample.text;
-        updateCounter();
-        submit();
-      });
-      els.samples.append(chip);
+      addSampleChip(sample);
     }
   } catch {
-    /* samples are a convenience; ignore */
+    // Same story as health: on a static host the samples ship in the engine
+    // bundle, so the chips still work with no API at all.
+    for (const sample of window.ForwardCheckEngine?.SAMPLES ?? []) {
+      addSampleChip(sample);
+    }
   }
+}
+
+function addSampleChip(sample) {
+  const chip = el('button', { class: 'chip', type: 'button', title: sample.text.slice(0, 160) }, sample.label);
+  chip.addEventListener('click', () => {
+    els.message.value = sample.text;
+    updateCounter();
+    submit();
+  });
+  els.samples.append(chip);
 }
 
 function updateCounter() {
@@ -243,28 +306,112 @@ async function submit() {
   const llmConfig = currentLlmConfig();
 
   try {
-    const response = await fetch('/api/verify', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(llmConfig ? { text, llm: llmConfig } : { text }),
-    });
-    const payload = await response.json();
+    const outcome = await verifyWithFallback(text, llmConfig);
 
-    if (!response.ok) {
-      els.output.replaceChildren(
-        errorBox(payload.message ?? payload.error ?? `Request failed with status ${response.status}.`),
-      );
+    if (outcome.error) {
+      els.output.replaceChildren(errorBox(outcome.error));
       return;
     }
 
-    state.lastReport = payload;
-    renderReport(payload);
+    state.lastReport = outcome.report;
+    renderReport(outcome.report);
   } catch (error) {
     els.output.replaceChildren(errorBox(`Could not reach the verifier: ${error.message}`));
   } finally {
     state.busy = false;
     els.verify.disabled = false;
     els.verify.textContent = 'Verify message';
+  }
+}
+
+/**
+ * Verify, with the offline engine as the floor.
+ *
+ * Returns `{ report }` or `{ error }`. The server is preferred because it can
+ * add fact-check matches and cited evidence; but a host with no API route (a
+ * static deploy is a legitimate way to run this) must still produce a report.
+ */
+async function verifyWithFallback(text, llmConfig) {
+  const server = await askServer(text, llmConfig);
+
+  if (server.kind === 'report') return { report: server.report };
+  if (server.kind === 'rejected') return { error: server.message };
+
+  // 'unreachable': no usable API. Degrade to the engine bundled into this page
+  // rather than showing the host's own 404 text back to the reader.
+  state.serverAvailable = false;
+  updateModeLabel();
+  return { report: localReport(text, llmConfig, server.detail) };
+}
+
+/**
+ * POST /api/verify and classify the reply.
+ *
+ * The body is read as text first: a static host answers with its own HTML or
+ * plain-text 404, and calling .json() straight away is what produced the
+ * unhelpful `Unexpected token 'T', "The page c..." is not valid JSON`.
+ */
+async function askServer(text, llmConfig) {
+  let response;
+  try {
+    response = await fetch('/api/verify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(llmConfig ? { text, llm: llmConfig } : { text }),
+      signal: hangGuard(),
+    });
+  } catch (error) {
+    return { kind: 'unreachable', detail: error.message };
+  }
+
+  const body = await response.text().catch(() => '');
+  const payload = parseJson(body);
+
+  // Our own API never 404s on POST /api/verify, so a 404 is the host saying the
+  // route does not exist.
+  if (response.status === 404) {
+    return { kind: 'unreachable', detail: 'no /api/verify route on this host' };
+  }
+  if (!payload || typeof payload !== 'object') {
+    return { kind: 'unreachable', detail: `the API replied ${response.status} with non-JSON content` };
+  }
+  if (response.ok) return { kind: 'report', report: payload };
+
+  // A JSON error from our API (too long, bad key, rate limited) is a real
+  // answer — show it instead of silently re-running the check offline.
+  if (response.status < 500) {
+    return { kind: 'rejected', message: payload.message ?? payload.error ?? `Request failed with status ${response.status}.` };
+  }
+  return { kind: 'unreachable', detail: `the API failed with status ${response.status}` };
+}
+
+/** Run the same heuristics, claim extractor and verdict fusion, in the browser. */
+function localReport(text, llmConfig, detail) {
+  const engine = window.ForwardCheckEngine;
+  if (!engine || typeof engine.offlineReport !== 'function') {
+    throw new Error('the offline engine (engine.js) did not load');
+  }
+  const report = engine.offlineReport(text);
+  report.offlineDetail = detail;
+  report.llmWanted = Boolean(llmConfig);
+  return report;
+}
+
+/**
+ * A slow server should not freeze the button forever. Generous on purpose: this
+ * is a hang guard, not a latency budget, so a working but slow LLM answer still
+ * comes back instead of being replaced by an offline report.
+ */
+function hangGuard() {
+  if (typeof AbortSignal === 'undefined' || typeof AbortSignal.timeout !== 'function') return undefined;
+  return AbortSignal.timeout(20000);
+}
+
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
 }
 
@@ -482,15 +629,22 @@ function providersCard(report) {
     card.append(el('p', { class: 'meta', style: 'color:var(--muted);font-size:12.5px;margin:12px 0 0' },
       `Lookup queries: ${report.queries.map((query) => `“${query}”`).join(', ')}`));
   }
+  if (report.servedBy === 'browser') {
+    card.append(el('p', { class: 'meta', style: 'color:var(--muted);font-size:12.5px;margin:12px 0 0' },
+      'Checked by the engine in this browser — no API answered, so nothing left this device.'
+        + (report.llmWanted ? ' The model key you entered was not used.' : '')));
+  }
   return card;
 }
 
 function replyCard(report) {
   const box = el('div', { class: 'reply' }, report.replySuggestion);
+  const reply = report.replySuggestion;
+
   const copy = el('button', { class: 'btn ghost small', type: 'button' }, 'Copy reply');
   copy.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(report.replySuggestion);
+      await navigator.clipboard.writeText(reply);
       copy.textContent = 'Copied ✓';
       setTimeout(() => { copy.textContent = 'Copy reply'; }, 1800);
     } catch {
@@ -498,11 +652,37 @@ function replyCard(report) {
     }
   });
 
+  // Send the answer back where the forward came from. wa.me with no number opens
+  // the person's own chat picker, so the reply goes to whoever sent the forward.
+  const bar = el('div', { class: 'reply-bar' },
+    copy,
+    shareLink('WhatsApp', `https://wa.me/?text=${encodeURIComponent(reply)}`),
+    shareLink('Telegram', `https://t.me/share/url?url=${encodeURIComponent(shareOrigin())}&text=${encodeURIComponent(reply)}`),
+    shareLink('SMS', `sms:?&body=${encodeURIComponent(reply)}`),
+  );
+
+  // Anything else — Signal, Instagram, Mail, a notes app — through the OS sheet.
+  if (typeof navigator.share === 'function') {
+    const share = el('button', { class: 'btn ghost small', type: 'button' }, 'Share…');
+    share.addEventListener('click', () => {
+      navigator.share({ text: reply }).catch(() => undefined);
+    });
+    bar.append(share);
+  }
+
   return el('section', { class: 'card' },
     el('h2', {}, 'Suggested reply to the sender'),
     box,
-    el('div', { class: 'reply-bar' }, copy),
+    bar,
   );
+}
+
+function shareLink(label, href) {
+  return el('a', { class: 'btn ghost small', href, target: '_blank', rel: 'noopener noreferrer' }, label);
+}
+
+function shareOrigin() {
+  return window.location.origin && window.location.origin !== 'null' ? window.location.origin : 'https://forward-check.invalid';
 }
 
 function renderEmpty() {

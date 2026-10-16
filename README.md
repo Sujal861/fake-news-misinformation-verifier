@@ -103,6 +103,50 @@ pbpaste | node cli.js
 
 The CLI reads keys from environment variables or a local `.dev.vars` file.
 
+## Reach it from a chat app
+
+A forward arrives in a chat, so the check has to be reachable there. Three routes, in
+increasing order of setup:
+
+| Route | What the reader does | Setup needed |
+| --- | --- | --- |
+| **Share sheet** | Long-press the message, tap Share, pick ForwardCheck (Android) | Install the PWA. No server, no account, nothing leaves the phone. |
+| **Prefilled link** | Opens `/?text=...`, which fills the box and runs the check | None. Works from any app, a QR code or a poster. |
+| **Chat bot** | Forwards the message to a bot and gets the verdict in the same thread | Worker secrets (below) |
+
+`public/manifest.webmanifest` registers the share target, `public/sw.js` caches the shell so
+the installed app opens offline, and `public/integrations.html` walks a reader through all of
+it. The message is stripped from the address bar as soon as the page opens, so a shared link
+does not leave someone's forward in their browser history.
+
+### Chat channels
+
+Both bots call the same `verify()` pipeline as the API route, so they work with **no provider
+keys at all** and pick up fact-check matches when the server has them.
+
+| Channel | Webhook | Secrets |
+| --- | --- | --- |
+| Telegram | `GET`/`POST` `/telegram` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` |
+| WhatsApp Cloud API | `GET`/`POST` `/whatsapp` | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` |
+
+Register the Telegram webhook once, after setting the two secrets on the Worker:
+
+```bash
+TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... \
+  npm run set-webhook -- https://your-deployment.example
+```
+
+For WhatsApp, set the callback URL to `https://your-deployment.example/whatsapp`, enter the
+same verify token in the Meta console, and subscribe to the `messages` field. The `GET` half of
+that route is Meta's handshake; the `POST` half checks the `X-Hub-Signature-256` HMAC against
+the raw body before parsing it. `WHATSAPP_API_VERSION` overrides the Graph API version, which
+defaults to `v26.0` and will eventually need bumping.
+
+An unconfigured channel refuses every webhook (`401`/`503`) rather than answering. Telegram
+replies to `/start` with instructions instead of analysing the command, both channels ignore
+edits and non-text updates, and WhatsApp status callbacks are dropped.
+
+
 ## Optional live providers
 
 All providers are optional and independent. If one is missing, its contribution is skipped; the report still returns and indicates which providers contributed.
@@ -153,6 +197,8 @@ The project's stated free-tier limits are 20 requests/minute and 200 requests/da
 | `GET` | `/api/health` | Configured providers, capabilities and limits |
 | `GET` | `/api/samples` | Example forwarded messages used by the UI |
 | `POST` | `/api/verify` | Verify a message and return the full report |
+| `GET`/`POST` | `/telegram` | Telegram bot webhook |
+| `GET`/`POST` | `/whatsapp` | WhatsApp Cloud API webhook (`GET` is Meta's handshake) |
 
 Example request:
 
@@ -173,6 +219,25 @@ npm run build
 
 The build creates `dist/worker.js`, `dist/public/` and `dist/manifest.json`. Deploy using `dist/manifest.json`. The Worker bundle is a single ES module without imports or Node built-ins; assets are served through `env.ASSETS.fetch` with SPA fallback.
 
+## Running without a server
+
+`public/` is a complete, self-contained app, and that is deliberate: it can be deployed to any
+static host — Vercel, Netlify, GitHub Pages — with no server at all.
+
+`scripts/build.mjs` compiles `worker/lib/engine.js` into `public/engine.js`, an IIFE exposing
+`window.ForwardCheckEngine`. That bundle is the *same* heuristics, claim extractor and verdict
+fusion the Worker runs, so the two cannot disagree about a message. When `/api/verify` does not
+answer, `public/app.js` falls back to it and returns a full report marked
+`servedBy: "browser"` — the page degrades to offline instead of failing.
+
+Two consequences worth knowing:
+
+- `public/engine.js` is generated and committed, so a deployment that never runs the build still
+  works. Rerun `npm run build` after changing anything under `worker/lib/`.
+- A static host has no shared keys, so its reports are heuristic-only. That is the honest
+  result, not a bug: no fact-check lookups exist there to be missed.
+
+
 ## Interface
 
 The existing interface uses a dark “forensic console” design: near-black backgrounds (`#0B0C0E`), subtle film grain, ambient light, a lime accent (`#D4FF3F`), Space Grotesk display typography and JetBrains Mono for data. Fonts are self-hosted to support the offline-first approach.
@@ -188,6 +253,12 @@ Severity uses green → amber → orange → red, based on whichever signal is m
 - **Rating normalization is a string mapper.** Unusual fact-check ratings become `unknown` rather than being guessed.
 - **The rate limit is per Worker isolate.** It helps with casual abuse but is not a substitute for Cloudflare rate-limiting controls in production.
 - **Free providers have usage limits.** Check provider terms and quotas before high-volume use.
+- **The chat channels read text only.** Forwarded images, voice notes and PDFs are not analysed
+  by the web app or by either bot.
+- **A static deployment is heuristic-only.** Without the Worker there is no fact-check database,
+  no web search and no model reasoning, because there is nowhere to keep a key.
+- **The service worker is network-first on purpose.** Serving a cached `engine.js` beside a newer
+  page would produce a wrong verdict, so an offline-capable page always revalidates first.
 
 ForwardCheck is an aid, not an authority. It can miss context and be wrong. Read linked sources and check the context before acting on a claim or forwarding it.
 

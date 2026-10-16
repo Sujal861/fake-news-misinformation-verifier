@@ -14,3 +14,23 @@ EXA_API_KEY=
 LLM_API_KEY=
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
+
+# ------------------------------------------------ chat channels (both optional)
+# With these unset the webhooks refuse requests rather than answering, and the
+# browser app is unaffected — it keeps working offline.
+
+# Telegram: a bot token from @BotFather plus a secret you invent. Register the
+# webhook with `npm run set-webhook -- https://your-deployment.example`.
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
+
+# WhatsApp Cloud API. Needs a Meta app with the WhatsApp product added:
+# an access token, the sending phone number ID, the app secret used to verify
+# webhook signatures, and a verify token you invent. The callback URL is
+# https://your-deployment.example/whatsapp
+WHATSAPP_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_APP_SECRET=
+WHATSAPP_VERIFY_TOKEN=
+# Leave blank to use the default in worker/channels/whatsapp.js.
+WHATSAPP_API_VERSION=

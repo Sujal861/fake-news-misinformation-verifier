@@ -8,19 +8,22 @@
  * `providers` describing exactly what contributed.
  */
 
-import { analyze, categoryLabel } from './heuristics.js';
-import { extractClaims, claimQuery } from './claims.js';
-import { fuse, replySuggestion, recommendedActions } from './verdict.js';
+import { PROVIDER_META, buildQueries, offlineStage, assembleReport } from './offline.js';
 import * as factcheck from '../providers/factcheck.js';
 import * as exa from '../providers/exa.js';
 import * as llm from '../providers/llm.js';
 import { round2 } from './text.js';
 
-export const PROVIDERS = [
-  { id: factcheck.id, label: factcheck.label, envVar: 'FACTCHECK_API_KEY', isConfigured: factcheck.isConfigured },
-  { id: exa.id, label: exa.label, envVar: 'EXA_API_KEY', isConfigured: exa.isConfigured },
-  { id: llm.id, label: llm.label, envVar: 'LLM_API_KEY', isConfigured: llm.isConfigured },
-];
+// Labels and env var names live in offline.js so the browser bundle knows them
+// too; here we only bind them to the provider modules that can actually answer.
+const PROVIDER_MODULES = { factcheck, exa, llm };
+
+export const PROVIDERS = PROVIDER_META.map((meta) => ({
+  id: PROVIDER_MODULES[meta.id].id,
+  label: PROVIDER_MODULES[meta.id].label,
+  envVar: meta.envVar,
+  isConfigured: PROVIDER_MODULES[meta.id].isConfigured,
+}));
 
 const DEFAULT_TIMEOUT_MS = 12000;
 
@@ -34,32 +37,7 @@ export function providerStatus(env) {
   }));
 }
 
-/**
- * Build the search queries we will spend our lookup budget on. This is
- * deliberately deterministic rather than model-generated so that a report is
- * reproducible without an LLM.
- */
-export function buildQueries(claims, text) {
-  const queries = [];
-  const seen = new Set();
-
-  const push = (value) => {
-    const query = String(value ?? '').replace(/\s+/g, ' ').trim();
-    if (query.length < 8) return;
-    const key = query.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    queries.push(query);
-  };
-
-  for (const claim of claims.slice(0, 2)) push(claimQuery(claim.text, 120));
-
-  // The offline extractor can be too aggressive with instructions, so fall back
-  // to the opening of the message when it produced nothing usable.
-  if (queries.length === 0) push(claimQuery(text, 120));
-
-  return queries.slice(0, 2);
-}
+export { buildQueries };
 
 /**
  * @param {string} rawText
@@ -89,9 +67,7 @@ export async function verify(rawText, env = {}, options = {}) {
 
   // ---------------------------------------------------------- offline stage
   const tOffline = Date.now();
-  const heuristics = analyze(rawText);
-  const claims = extractClaims(heuristics.ctx.text);
-  const queries = buildQueries(claims, heuristics.ctx.text);
+  const { heuristics, claims, queries } = offlineStage(rawText);
   timings.offline = Date.now() - tOffline;
 
   // The reasoning step runs on the server's key or the caller's own key.
@@ -176,39 +152,20 @@ export async function verify(rawText, env = {}, options = {}) {
     }
   }
 
-  // ------------------------------------------------------------------- fusion
-  const tFuse = Date.now();
-  const fused = fuse({ heuristics, factChecks, llm: llmResult, evidence, claims });
-  timings.fusion = Date.now() - tFuse;
-
-  const report = {
-    id: reportId(heuristics.ctx.text),
-    createdAt: new Date().toISOString(),
-    input: {
-      text: heuristics.ctx.text,
-      length: heuristics.ctx.text.length,
-      truncated: rawText.length > heuristics.ctx.text.length,
-    },
-    language: heuristics.ctx.language,
-    verdict: fused,
-    claims: claims.map((claim) => ({ text: claim.text, checkWorthiness: claim.checkWorthiness })),
-    redFlags: heuristics.matched.map((hit) => ({ ...hit, categoryLabel: categoryLabel(hit.category) })),
-    credibilityCredits: heuristics.credits.map((hit) => ({ ...hit, categoryLabel: categoryLabel(hit.category) })),
+  // --------------------------------------------------------- fusion + report
+  return assembleReport({
+    rawText,
+    heuristics,
+    claims,
+    queries,
     factChecks,
     evidence,
     llm: llmResult,
-    queries,
     providers,
-    timings: { ...timings, total: Date.now() - startedAt },
-    mode: providers.llm.status === 'ok' || providers.exa.status === 'ok' || providers.factcheck.status === 'ok'
-      ? 'live-enhanced'
-      : 'offline-heuristics',
-  };
-
-  report.recommendedActions = recommendedActions({ ...report, heuristics });
-  report.replySuggestion = replySuggestion(report);
-
-  return report;
+    timings,
+    startedAt,
+    servedBy: 'worker',
+  });
 }
 
 /** Run the same lookup across several queries, de-duplicating the union. */
@@ -244,20 +201,6 @@ function timeoutSignal(ms) {
   const controller = new AbortController();
   setTimeout(() => controller.abort(), ms);
   return controller.signal;
-}
-
-/**
- * A stable, non-cryptographic id for logging/dedup. We deliberately do not use
- * crypto here because the report content is not a secret and FNV-1a is enough
- * to distinguish two messages in a log line.
- */
-function reportId(text) {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i += 1) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return `fc_${hash.toString(16).padStart(8, '0')}`;
 }
 
 export { round2 };

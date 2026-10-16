@@ -1041,7 +1041,9 @@ p.meta { color: var(--muted); }
   white-space: pre-wrap;
   word-break: break-word;
 }
-.reply-bar { display: flex; gap: 12px; align-items: center; margin-top: 15px; }
+/* flex-wrap only: the bar now carries copy + per-app send buttons, and a
+   narrow phone should wrap rather than overflow. No visual change otherwise. */
+.reply-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 15px; }
 
 /* ------------------------------------------------------------------- llm */
 .llm-note {
@@ -1210,4 +1212,52 @@ footer a:hover { color: var(--bg); background: var(--accent); text-decoration: n
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ------------------------------------------------------ integrations page */
+
+/* A command or URL the reader should copy. Same treatment as an evidence quote
+   on the main page, minus the "↳" prefix, which belongs to quoted evidence. */
+.code-block {
+  display: block;
+  margin: 12px 0 0;
+  padding: 11px 14px;
+  background: #0a0b0d;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--accent);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.doc-section { margin-top: 20px; }
+.doc-section h3 { margin: 0 0 8px; font-size: 16px; }
+.doc-section p { color: var(--muted); font-size: 14.5px; line-height: 1.7; margin: 0 0 10px; }
+.doc-section ol, .doc-section ul { color: var(--muted); font-size: 14.5px; line-height: 1.8; padding-left: 20px; margin: 0 0 10px; }
+.doc-section li { margin-bottom: 4px; }
+.doc-section strong { color: var(--text); }
+
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.status-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #0a0b0d;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }

@@ -10,6 +10,7 @@
     "test": "node --test",
     "check": "node scripts/build.mjs && node --test",
     "verify": "node cli.js",
+    "set-webhook": "node scripts/set-webhook.mjs",
     "deploy:preview": "node scripts/build.mjs"
   },
   "engines": {

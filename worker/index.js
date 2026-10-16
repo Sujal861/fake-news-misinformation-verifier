@@ -2,9 +2,11 @@
  * Cloudflare Worker entry point.
  *
  * Routes:
- *   GET  /api/health  -> which evidence providers are configured
+ *   GET  /api/health  -> which evidence providers and chat channels are configured
  *   POST /api/verify  -> { text } => full verification report
  *   GET  /api/samples -> demo forwards used by the UI
+ *   GET|POST /telegram -> Telegram bot webhook
+ *   GET|POST /whatsapp -> WhatsApp Cloud API webhook (GET is Meta's handshake)
  *   *                 -> static assets from public/
  *
  * Runs entirely on fetch/Web APIs so it works under workerd as well as Node 20+.
@@ -13,6 +15,11 @@
 import { verify, providerStatus } from './lib/verify.js';
 import { SAMPLES } from './lib/samples.js';
 import { PRESETS, resolveLlmConfig } from './providers/llm.js';
+import * as telegram from './channels/telegram.js';
+import * as whatsapp from './channels/whatsapp.js';
+
+/** Chat channels people can reach the verifier through. */
+const CHANNELS = [telegram, whatsapp];
 
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -36,6 +43,23 @@ export default {
         const message = error instanceof Error ? error.message : String(error);
         console.error('api_error', { path: url.pathname, message });
         return json({ error: 'internal_error', message }, 500);
+      }
+    }
+
+    // Chat webhooks sit at the root so the URLs stay short enough to paste into
+    // the BotFather or Meta consoles.
+    const channel = CHANNELS.find((candidate) => candidate.webhookPath === url.pathname);
+    if (channel) {
+      try {
+        // Meta verifies a new callback URL with a GET; Telegram only ever POSTs.
+        if (url.pathname === whatsapp.webhookPath && request.method === 'GET') {
+          return whatsapp.handleSubscription(request, env);
+        }
+        return await channel.handleWebhook(request, env, ctx);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('channel_error', { path: url.pathname, message });
+        return new Response('Internal error', { status: 500 });
       }
     }
 
@@ -83,6 +107,14 @@ function handleHealth(env) {
     limits: { maxInputChars: MAX_INPUT_CHARS, requestsPerMinute: RATE_LIMIT.max },
     // Offered so the UI can build a provider picker without hardcoding it.
     llmPresets: PRESETS.map(({ id, label, model, keyUrl }) => ({ id, label, model, keyUrl })),
+    // Where people can reach the same engine from a chat app, and whether this
+    // deployment has the secrets for it yet.
+    channels: CHANNELS.map((channel) => ({
+      id: channel.id,
+      label: channel.label,
+      configured: channel.isConfigured(env),
+      webhookPath: channel.webhookPath,
+    })),
   });
 }
 

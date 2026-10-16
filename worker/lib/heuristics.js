@@ -45,13 +45,16 @@ export const SIGNALS = [
     weight: 17,
     why: 'Real news never depends on you forwarding it to a minimum number of people.',
     detect: (ctx) => [
-      ...matchAll(ctx.text, /forward (?:this )?to \d+\s*(?:people|contacts|groups|persons)/gi),
-      ...matchAll(ctx.text, /forward (?:this |it )?to (?:all|everyone|every|both|your (?:family|friends|groups|contacts))/gi),
-      ...matchAll(ctx.text, /(?:if|agar) you (?:don'?t|do not|dont) forward/gi),
+      // "forward", "share" and "send" are the same demand to a reader; a scam
+      // that asks for a minimum audience is a chain letter whatever verb it uses.
+      ...matchAll(ctx.text, /(?:forward|share|send) (?:this |it |the )?(?:message|post|link|msg)?\s?(?:to|with) (?:at least )?\d{1,4}\s*(?:people|persons|contacts|groups|friends|members)/gi),
+      ...matchAll(ctx.text, /(?:forward|share|send) (?:this |it )?(?:message |msg )?(?:to|with) (?:all|everyone|every|both|your (?:family|friends|groups|contacts))/gi),
+      ...matchAll(ctx.text, /(?:if|agar) you (?:don'?t|do not|dont) (?:forward|share)/gi),
       ...matchAll(ctx.text, /otherwise (?:you|your (?:family|account|number))[^.\n]{0,40}/gi),
       ...matchAll(ctx.text, /send (?:this )?to (?:all|everyone|10|20|5)/gi),
-      ...matchAll(ctx.text, /(?:sabko|sabhi ko|sab logon ko) (?:bhej|forward|bhejo)/gi),
-      ...matchAll(ctx.text, /सबको (?:भेज|फॉरवर्ड)/g),
+      ...matchAll(ctx.text, /(?:sabko|sabhi ko|sab logon ko) (?:bhej|forward|share|bhejo)/gi),
+      ...matchAll(ctx.text, /\d{1,4}\s*(?:log|logon|logo|people)\s*(?:ko|mein)?\s*(?:bhej|share|forward)/gi),
+      ...matchAll(ctx.text, /सबको (?:भेज|फॉरवर्ड|शेयर)/g),
     ],
   },
   {
@@ -204,6 +207,35 @@ export const SIGNALS = [
       out.push(...matchAll(ctx.text, /bank (?:account|a\/c) (?:number|no\.?|details)/gi));
       out.push(...matchAll(ctx.text, /(?:paisa|paise) (?:bhej|transfer)/gi));
       return out;
+    },
+  },
+  {
+    id: 'money-for-money-promise',
+    label: 'Promises to send back more than you send',
+    category: 'scam',
+    weight: 22,
+    why: 'Money in for more money out is the shape of every advance-fee, "doubling" and fake-investment fraud. The return never arrives.',
+    detect: (ctx) => {
+      // Money has to be named on both sides of the promise. "Lend me 200" and
+      // "give me your number" are ordinary messages; "give me 200 and I will
+      // return 400" is the fraud. Requiring an amount in each half is what keeps
+      // this signal from firing on normal conversation.
+      const ask = matchAll(ctx.text, /(?:give|send|transfer|deposit|pay|invest)\s+(?:me|us)\b[^.\n]{0,40}/gi).filter(mentionsAmount);
+
+      // Typo-tolerant on purpose: forwards are typed fast, and the common
+      // misspellings (giv, retun, recieve) are exactly what a regex would miss.
+      const promise = ask.length === 0
+        ? []
+        : matchAll(ctx.text, /\b(?:i|we)\s*(?:will|'ll|shall|can)\s*(?:giv|give|retun|return|pai|pay|credit|doubl|send)\b[^.\n]{0,40}/gi).filter(mentionsAmount);
+
+      // A promised rate of return stands on its own: guaranteeing a specific
+      // percentage is a fraud marker whether or not the message also asks for
+      // money, which is why these two are not gated behind the ask.
+      const rate = matchAll(ctx.text, /\b\d{2,3}\s?%\s*(?:return|profit|guaranteed|daily|monthly)/gi);
+      const back = matchAll(ctx.text, /\b(?:money|amount|investment)\s*(?:double|doubled|triple|tripled)\b/gi);
+
+      if (promise.length === 0 && rate.length === 0 && back.length === 0) return [];
+      return [...ask, ...promise, ...rate, ...back].slice(0, 4);
     },
   },
   {
@@ -493,6 +525,11 @@ export function analyze(text) {
  * as elevated, and the genuinely stacked forwards saturate near the top
  * instead of pinning at 100 as soon as the weights add up.
  */
+/** Does a snippet name a sum of money? Used to keep two-part signals precise. */
+function mentionsAmount(snippet) {
+  return /(?:₹|\brs\b|\brsd\b|\brs\.|\binr\b|\brupees?\b|\brupaye\b|\bdollars?\b|\d)/i.test(snippet);
+}
+
 export function squash(weight) {
   if (weight <= 0) return 0;
   const score = 100 * (1 - Math.exp(-weight / 40));
