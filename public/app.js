@@ -32,6 +32,37 @@ const state = { busy: false, lastReport: null, llmPresets: [], serverAvailable: 
 
 const LLM_STORE_KEY = 'forwardcheck.llm';
 
+// ---------------------------------------------------------------- install prompt
+// The browser fires this once when the PWA can be installed. We defer it so the
+// user gets a button instead of the banner appearing randomly.
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e; showInstallUI();
+});
+
+function showInstallUI() {
+  const btn = document.createElement('button');
+  btn.id = 'install-pwa';
+  btn.textContent = 'Install ForwardCheck';
+  btn.style.cssText = `
+    position: fixed; right: 20px; bottom: 20px;
+    z-index: 9001; background: #d4ff3f; color: #0b0c0e;
+    border: none; padding: 10px 16px; border-radius: 999px;
+    font-family: 'Space Grotesk', sans-serif; font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.35);`;
+  btn.onclick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') console.log('User installed ForwardCheck');
+      deferredPrompt = null;
+      btn.remove();
+    }
+  };
+  document.body.append(btn);
+}
+
 // ---------------------------------------------------------------- bootstrapping
 
 async function boot() {
